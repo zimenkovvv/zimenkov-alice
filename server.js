@@ -20,6 +20,9 @@ app.get(['/', '/health'], (req, res) => {
 // Сюда Алиса присылает каждую фразу пользователя
 app.post('/', async (req, res) => {
   const alice = req.body;
+  if (!alice?.session || !alice?.request) {
+    return res.sendStatus(400);
+  }
 
   // Чужой навык? Не отвечаем (защита от тех, кто найдёт адрес туннеля)
   if (config.skillId && alice.session.skill_id !== config.skillId) {
@@ -28,13 +31,20 @@ app.post('/', async (req, res) => {
 
   console.log(`→ ${alice.request.original_utterance || '(навык запущен)'}`);
 
-  const answer = await makeAnswer(alice);
+  let answer;
+  try {
+    answer = await makeAnswer(alice);
+  } catch (error) {
+    console.error('✗', error);
+    answer = { text: 'Что-то сломалось, повтори, пожалуйста.', endSession: false };
+  }
 
   // Формат ответа, который ждёт Алиса
   res.json({
     version: alice.version,
     response: {
       text: answer.text,
+      ...(answer.tts && { tts: answer.tts }),
       end_session: answer.endSession,
     },
   });
